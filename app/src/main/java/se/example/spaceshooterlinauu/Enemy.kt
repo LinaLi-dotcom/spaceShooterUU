@@ -31,7 +31,7 @@ class Enemy(res: Resources): BitmapEntity() {
         respawn()
     }
 
-    fun respawn() {
+    override fun respawn() {
         x = ((STAGE_WIDTH + RNG.nextInt(ENEMY_SPAWN_OFFSET)).toFloat())
         y = RNG.nextInt(STAGE_HEIGHT - ENEMY_HEIGHT).toFloat()
     }

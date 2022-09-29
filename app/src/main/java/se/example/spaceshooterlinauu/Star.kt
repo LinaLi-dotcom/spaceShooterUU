@@ -7,10 +7,13 @@ import android.graphics.Paint
 class Star  : Entity () {
     private val TAG = "Star"
     private val color = Color.YELLOW
-    private val radius: Float
+    private val radius: Float =  (RNG.nextInt(6)+2).toFloat()
 
     init{
-        radius = (RNG.nextInt(6)+2).toFloat()
+        respawn()
+    }
+
+    override fun respawn() {
         x = RNG.nextInt(STAGE_WIDTH).toFloat()
         y = RNG.nextInt(STAGE_HEIGHT).toFloat()
         width = radius * 2f

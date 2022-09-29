@@ -12,40 +12,55 @@ import android.view.SurfaceView
 import java.lang.Exception
 import java.util.*
 import kotlin.collections.ArrayList
-import kotlin.math.roundToInt
 
 const val STAGE_WIDTH = 1080
 const val STAGE_HEIGHT = 720
 const val STAR_COUNT = 40
 const val ENEMY_COUNT = 10
-public val RNG = Random(uptimeMillis())
+val RNG = Random(uptimeMillis())
 @Volatile var isBoosting = false
 var playerSpeed = 0f
+private val TAG = "game"
 
-class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Callback{
-    private val TAG = "game"
+class Game(context: Context) : SurfaceView(context), Runnable, SurfaceHolder.Callback{
+    private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val editor = prefs.edit()
     private lateinit var gameThread : Thread
 
     @Volatile
     private var isRunning = false
     private var isGameOver = false
+    private val jukebox = Jukebox(context.assets)
     private val player = Player(resources)
-    private val stars = ArrayList<Entity>()
-    private val enemies = ArrayList<Entity>()
+    private val entities = ArrayList<Entity>()
     private val paint = Paint()
-    private var distanceTraveled = 0f
+    private var distanceTraveled = 0
+    private var maxDistanceTraveled = 0
+
 
     init{
         resources
         holder.addCallback(this)
         holder.setFixedSize(STAGE_WIDTH, STAGE_HEIGHT)
         for (i in 0 until STAR_COUNT) {
-            stars.add(Star())
+            entities.add(Star())
         }
         for (i in 0 until ENEMY_COUNT) {
-            enemies.add(Enemy(resources))
+            entities.add(Enemy(resources))
         }
     }
+
+    private fun restart() {
+        // reset all entities
+        for(entity in entities) {
+            entity.respawn()
+        }
+        player.respawn()
+        distanceTraveled = 0
+        maxDistanceTraveled = prefs.getInt(LONGEST_DIST, 0)
+        isGameOver = false
+    }
+
     override fun run() {
         while (isRunning) {
             update()
@@ -55,13 +70,10 @@ class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Ca
 
     private fun update(){
         player.update()
-        for(star in stars){
-            star.update()
+        for(entity in entities){
+            entity.update()
         }
-        for(enemy in enemies){
-            enemy.update()
-        }
-        distanceTraveled += playerSpeed
+        distanceTraveled += playerSpeed.toInt()
         checkCollisions()
         checkGameOver()
     }
@@ -74,7 +86,7 @@ class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Ca
         paint.textSize = textSize
         if(!isGameOver) {
             canvas.drawText("Health: ${ player.health}", margin, textSize, paint)
-            canvas.drawText("Distance: ${ distanceTraveled.roundToInt() }", margin, textSize*2, paint)
+            canvas.drawText("Distance: $distanceTraveled", margin, textSize*2, paint)
         } else {
             paint.textAlign = Paint.Align.CENTER
             val centerX = STAGE_WIDTH * 0.5f
@@ -87,17 +99,21 @@ class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Ca
 
     private fun checkGameOver() {
         if(player.health < 0) {
-            // do some game over stuff
             isGameOver = true
+            if(distanceTraveled > maxDistanceTraveled) {
+                editor.putInt(LONGEST_DIST, distanceTraveled)
+                editor.apply()
+            }
         }
     }
 
     private fun checkCollisions() {
-        for(enemy in enemies) {
+        for(i in STAR_COUNT until entities.size) {
+            val enemy = entities[i]
             if(isColliding(enemy, player)) {
                 enemy.onCollision(player)
                 player.onCollision(enemy)
-                //TODO: play sound effects
+                jukebox.play(SFX.crash)
             }
         }
     }
@@ -108,11 +124,8 @@ class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Ca
         //draw the game world to the surface
         //unlock and post the surface to the UI thread
         canvas.drawColor(Color.BLUE)
-        for(star in stars){
-            star.render(canvas, paint)
-        }
-        for(enemy in enemies){
-            enemy.render(canvas, paint)
+        for(entity in entities){
+            entity.render(canvas, paint)
         }
         player.render(canvas, paint)
         renderHud(canvas, paint)
@@ -133,7 +146,7 @@ class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Ca
         try {
             gameThread.join()
         }
-        catch (e: Exception) {
+        catch (_: Exception) {
 
         }
     }
@@ -153,7 +166,11 @@ class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Ca
                 isBoosting = false}
             MotionEvent.ACTION_DOWN ->{
                 Log.d(TAG, "isBoosting")
-                isBoosting = true
+                if(isGameOver){
+                    restart()
+                } else {
+                    isBoosting = true
+                }
             }
         }
         return true
@@ -169,5 +186,10 @@ class Game(context: Context?) : SurfaceView(context), Runnable, SurfaceHolder.Ca
 
     override fun surfaceDestroyed(p0: SurfaceHolder) {
         Log.d(TAG, "surfaceDestroyed")
+    }
+
+    companion object {
+        const val PREFS = "se.example.spaceshooterlinauu"
+        const val LONGEST_DIST = "longest_distance"
     }
 }
